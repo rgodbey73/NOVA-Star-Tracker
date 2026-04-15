@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NOVA — Star Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{width:100%;height:100%;overflow:hidden;background:#010408;font-family:'Share Tech Mono',monospace;color:#c0d8f0;}
+:root{--cyan:#00d4ff;--green:#00e87a;--amber:#ffaa00;--red:#ff4060;--bg1:#010408;--bg2:#060d1a;--border:rgba(0,212,255,0.15);--dim:#3d6880;}
+
+/* === CANVAS === */
+#cvs{display:block;position:absolute;inset:0;width:100%;height:100%;}
+#wrap{position:fixed;inset:0;}
+
+/* === CORNER LABELS === */
+.clabel{position:absolute;font-size:11px;letter-spacing:1px;color:rgba(0,212,255,0.35);pointer-events:none;}
+.clabel-tl{top:8px;left:10px;}
+.clabel-tr{top:8px;right:10px;}
+.clabel-bl{bottom:70px;left:10px;}
+
+/* === TOP HUD === */
+#hud{position:absolute;top:0;left:0;right:0;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(1,4,8,0.7);border-bottom:1px solid var(--border);
+  padding:6px 12px;backdrop-filter:blur(4px);}
+.logo{font-family:'Orbitron',sans-serif;font-size:16px;color:var(--cyan);letter-spacing:2px;}
+.logo em{font-style:normal;}
+#badge{font-size:11px;letter-spacing:2px;padding:3px 8px;border-radius:2px;border:1px solid;}
+.badge-acq{color:#ff6040;border-color:rgba(255,96,64,0.4);background:rgba(255,60,30,0.1);}
+.badge-trk{color:var(--amber);border-color:rgba(255,170,0,0.4);background:rgba(255,170,0,0.08);}
+.badge-lck{color:var(--green);border-color:rgba(0,232,122,0.4);background:rgba(0,232,122,0.08);}
+#hud-ra,#hud-dc{font-size:12px;color:var(--cyan);}
+#hud-coords{text-align:center;}
+
+/* === FLOATING CONTROLS === */
+#float-ctrl{position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:column;gap:8px;align-items:center;}
+.fcbtn{width:42px;height:42px;border-radius:8px;border:1px solid var(--border);
+  background:rgba(1,4,8,0.75);color:var(--cyan);font-size:18px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  backdrop-filter:blur(4px);user-select:none;}
+.fcbtn:active{background:rgba(0,212,255,0.15);}
+.fcbtn.on{border-color:rgba(0,212,255,0.5);background:rgba(0,212,255,0.12);}
+#fov-lbl{font-size:10px;color:var(--dim);text-align:center;letter-spacing:0.5px;}
+
+/* === GOTO CHIPS === */
+#chips{position:absolute;left:0;right:52px;
+  display:flex;gap:6px;overflow-x:scroll;padding:5px 10px;
+  background:rgba(1,4,8,0.6);border-bottom:1px solid var(--border);
+  scrollbar-width:none;backdrop-filter:blur(4px);
+  -webkit-overflow-scrolling:touch;cursor:grab;}
+#chips::-webkit-scrollbar{display:none;}
+.chip{flex-shrink:0;font-size:11px;letter-spacing:1px;padding:4px 10px;
+  border-radius:12px;border:1px solid var(--border);color:rgba(0,212,255,0.7);
+  background:rgba(0,0,0,0.4);cursor:pointer;white-space:nowrap;}
+.chip:active{background:rgba(0,212,255,0.15);}
+
+/* === BOTTOM SHEET === */
+#sheet{position:absolute;left:0;right:0;bottom:0;
+  background:rgba(3,6,15,0.95);border-top:1px solid var(--border);
+  backdrop-filter:blur(8px);
+  transition:height 0.3s ease;height:56px;overflow:hidden;}
+#sheet.expanded{height:min(360px,50vh);}
+
+/* Tab bar */
+#tabs{display:flex;height:56px;border-bottom:1px solid var(--border);}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;cursor:pointer;font-size:9px;letter-spacing:1px;color:var(--dim);
+  border-right:1px solid var(--border);transition:color 0.15s;}
+.tab:last-child{border-right:none;}
+.tab.active{color:var(--cyan);}
+.tab svg{width:18px;height:18px;}
+#tab-content{overflow-y:auto;max-height:calc(min(360px,50vh) - 56px);padding:12px 14px;-webkit-overflow-scrolling:touch;}
+
+/* Tab panes */
+.pane{display:none;}
+.pane.active{display:block;}
+
+/* Attitude */
+.att-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}
+.att-cell{background:rgba(0,0,0,0.3);border:1px solid rgba(0,212,255,0.1);border-radius:4px;padding:8px 10px;}
+.att-lbl{font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:2px;}
+.att-val{font-size:18px;color:var(--cyan);}
+.att-err{font-size:10px;color:rgba(0,232,122,0.7);margin-top:1px;}
+.att-unit{font-size:11px;color:var(--dim);}
+.sec-hdr{font-size:10px;letter-spacing:2px;color:var(--dim);margin:10px 0 6px;}
+.qrow{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.qcell{background:rgba(0,0,0,0.4);border:1px solid rgba(0,212,255,0.12);border-radius:3px;padding:6px 4px;text-align:center;}
+.qltr{font-size:11px;color:var(--amber);margin-bottom:2px;}
+.qnum{font-size:15px;color:#b0d0ff;}
+.qconv{font-size:10px;color:var(--dim);margin-top:8px;text-align:center;line-height:1.5;}
+
+/* Stars */
+.mrow{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+.metric{background:rgba(0,0,0,0.3);border:1px solid rgba(0,212,255,0.1);border-radius:4px;padding:8px;text-align:center;}
+.mv{font-size:22px;color:var(--cyan);}
+.ml{font-size:10px;color:var(--dim);letter-spacing:1px;}
+.ctrack{height:4px;background:rgba(0,212,255,0.1);border-radius:2px;margin:6px 0;}
+.cfill{height:100%;border-radius:2px;transition:width 0.4s;}
+.sr{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(0,212,255,0.07);}
+.sr:last-child{border-bottom:none;}
+.sr-dot{width:6px;height:6px;border-radius:50%;}
+.sr-name{font-size:13px;color:#88c8e8;flex:1;}
+.sr-mag{font-size:12px;color:var(--dim);}
+
+/* About / Quat explainer */
+.exp-section{margin-bottom:14px;}
+.exp-hdr{font-size:11px;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;}
+.exp-p{font-size:12px;color:#7a9eb8;line-height:1.6;}
+.qcard{display:grid;grid-template-columns:20px 1fr;gap:4px 8px;margin-top:8px;}
+.qcard-ltr{font-size:13px;font-weight:bold;padding-top:2px;}
+.qcard-desc{font-size:11px;color:#7a9eb8;line-height:1.5;}
+
+/* Star popup */
+#star-popup{display:none;position:absolute;background:#060d1a;border:1px solid rgba(0,212,255,0.4);
+  border-radius:4px;padding:10px 12px;max-width:220px;pointer-events:all;z-index:20;cursor:pointer;}
+#star-popup h3{font-size:14px;color:var(--cyan);margin-bottom:4px;}
+#star-popup .sp-mag{font-size:11px;color:rgba(0,212,255,0.6);margin-bottom:4px;}
+#star-popup p{font-size:11px;color:#7a9eb8;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<div id="wrap">
+  <canvas id="cvs"></canvas>
+  <div class="clabel clabel-tl" id="fovlbl">FOV 25°</div>
+  <div class="clabel clabel-tr">ICRS J2000</div>
+  <div class="clabel clabel-bl" id="radeclbl">—</div>
+  <!-- GEO widget canvas — bottom right -->
+  <canvas id="geo-cvs" width="130" height="130" style="position:absolute;bottom:64px;right:4px;opacity:0.9;pointer-events:none"></canvas>
+  <!-- ? info button — top-left of sky, below chips -->
+  <button id="btn-info" onclick="toggleInfoModal()" style="position:absolute;top:0;left:8px;
+    font-family:'Share Tech Mono',monospace;font-size:16px;font-weight:bold;
+    background:rgba(1,4,8,0.75);color:rgba(0,212,255,0.8);
+    border:1px solid rgba(0,212,255,0.35);border-radius:50%;
+    width:36px;height:36px;cursor:pointer;line-height:1;
+    backdrop-filter:blur(4px);z-index:6;display:flex;align-items:center;justify-content:center">?</button>
+  <div id="star-popup" onclick="this.style.display='none'"><h3 id="sp-name"></h3><div class="sp-mag" id="sp-mag"></div><p id="sp-info"></p><div style="font-size:9px;color:var(--dim);margin-top:5px">tap to dismiss</div></div>
+</div>
+
+<!-- TOP HUD -->
+<div id="hud">
+  <div style="display:flex;align-items:center;gap:8px">
+    <button id="btn-reset" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;
+      background:transparent;color:rgba(0,212,255,0.5);border:1px solid rgba(0,212,255,0.2);
+      border-radius:3px;padding:3px 7px;cursor:pointer">↺ RESET</button>
+    <div class="logo">⭐ <em>NOVA</em></div>
+  </div>
+  <div id="hud-coords">
+    <div id="hud-ra" style="font-size:11px;color:var(--dim)">—</div>
+    <div id="hud-dc" style="font-size:11px;color:var(--dim)">—</div>
+  </div>
+  <div id="badge" class="badge-acq">ACQUIRING</div>
+</div>
+
+<!-- INFO MODAL -->
+<div id="info-modal" style="display:none;position:fixed;inset:0;z-index:100;
+  background:rgba(1,4,8,0.88);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;">
+  <div style="background:#060d1a;border:1px solid rgba(0,212,255,0.3);border-radius:8px;
+    max-width:340px;width:calc(100% - 40px);padding:20px;position:relative;max-height:80vh;overflow-y:auto">
+    <button onclick="toggleInfoModal()" style="position:absolute;top:10px;right:12px;
+      font-family:'Share Tech Mono',monospace;font-size:16px;background:transparent;
+      color:var(--dim);border:none;cursor:pointer;line-height:1">✕</button>
+    <div style="font-family:'Orbitron',sans-serif;font-size:13px;color:var(--cyan);letter-spacing:2px;margin-bottom:14px">HOW TO USE</div>
+    <div style="font-size:12px;color:#7a9eb8;line-height:1.8;display:flex;flex-direction:column;gap:9px">
+      <div><span style="color:var(--cyan)">Drag</span> to pan across the sky.</div>
+      <div><span style="color:var(--cyan)">Pinch</span> to zoom (or use + / − buttons).</div>
+      <div><span style="color:var(--cyan)">Tap a star</span> to see its name, type, distance, and a fun fact.</div>
+      <div><span style="color:var(--cyan)">Constellation chips</span> at the top — scroll sideways and tap to jump to a famous star pattern.</div>
+      <div><span style="color:var(--cyan)">MODE button</span> cycles the detection pipeline:<br>
+        RAW → DETECTING → TRIANGLES → MATCHING.<br>
+        <span style="color:var(--dim);font-size:11px">TRIANGLES shows the pattern-matching algorithm in action. Attitude data (RA, Dec, quaternion) is only computed in TRIANGLES and MATCHING modes.</span></div>
+      <div><span style="color:var(--cyan)">⊙ RINGS</span> toggles detection rings on background stars.</div>
+      <div><span style="color:var(--cyan)">↺ RESET</span> returns to Orion at the default view.</div>
+      <div><span style="color:var(--cyan)">ATTITUDE tab</span> shows live RA, Dec, Roll, and quaternion output. Tap SET ROLL to adjust roll angle.</div>
+      <div><span style="color:var(--cyan)">STARS tab</span> shows detected star counts and matched identifications.</div>
+    </div>
+  </div>
+</div>
+
+<!-- CONSTELLATION CHIPS -->
+<div id="chips">
+  <div class="chip" onclick="gotoStar(85,0,25)">Orion</div>
+  <div class="chip" onclick="gotoStar(185,57,25)">Big Dipper</div>
+  <div class="chip" onclick="gotoStar(240,80,35)">Little Dipper</div>
+  <div class="chip" onclick="gotoStar(113,30,22)">Gemini</div>
+  <div class="chip" onclick="gotoStar(248,-22,22)">Scorpius</div>
+  <div class="chip" onclick="gotoStar(306,42,25)">Cygnus</div>
+  <div class="chip" onclick="gotoStar(12,60,22)">Cassiopeia</div>
+  <div class="chip" onclick="gotoStar(186,-60,18)">Southern Cross</div>
+  <div class="chip" onclick="gotoStar(155,15,25)">Leo</div>
+  <div class="chip" onclick="gotoStar(279,38,25)">Summer Triangle</div>
+</div>
+
+<!-- FLOATING CONTROLS -->
+<div id="float-ctrl">
+  <div class="fcbtn" id="btn-fov-in" title="Zoom in">+</div>
+  <div id="fov-lbl">25°</div>
+  <div class="fcbtn" id="btn-fov-out" title="Zoom out">−</div>
+  <div class="fcbtn" id="btn-pipeline" title="Pipeline mode" style="font-size:11px;letter-spacing:0;flex-direction:column;gap:1px">
+    <span style="font-size:9px;color:var(--dim)">MODE</span>
+    <span id="pipe-lbl" style="font-size:10px">MATCH</span>
+  </div>
+  <div class="fcbtn" id="btn-bgrings" title="BG star rings" style="font-size:10px;letter-spacing:0;flex-direction:column;gap:1px">
+    <span style="font-size:9px;color:var(--dim)">RINGS</span>
+    <span style="font-size:12px">⊙</span>
+  </div>
+</div>
+
+<!-- BOTTOM SHEET -->
+<div id="sheet">
+  <div id="tabs">
+    <div class="tab active" data-tab="attitude" onclick="switchTab('attitude')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="9"/><line x1="12" y1="3" x2="12" y2="7"/>
+        <line x1="12" y1="17" x2="12" y2="21"/><line x1="3" y1="12" x2="7" y2="12"/>
+        <line x1="17" y1="12" x2="21" y2="12"/><circle cx="12" cy="12" r="2" fill="currentColor"/>
+      </svg>
+      ATTITUDE
+    </div>
+    <div class="tab" data-tab="stars" onclick="switchTab('stars')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+      </svg>
+      STARS
+    </div>
+    <div class="tab" data-tab="about" onclick="switchTab('about')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      WHAT IS THIS
+    </div>
+  </div>
+
+  <div id="tab-content">
+    <!-- ATTITUDE TAB -->
+    <div class="pane active" id="pane-attitude">
+      <div class="att-grid">
+        <div class="att-cell">
+          <div class="att-lbl">RIGHT ASCENSION</div>
+          <div class="att-val" id="p-ra">—</div>
+          <div class="att-err" id="p-ra-err"></div>
+          <div class="att-unit">degrees</div>
+        </div>
+        <div class="att-cell">
+          <div class="att-lbl">DECLINATION</div>
+          <div class="att-val" id="p-dc">—</div>
+          <div class="att-err" id="p-dc-err"></div>
+          <div class="att-unit">degrees</div>
+        </div>
+        <div class="att-cell">
+          <div class="att-lbl">ROLL ANGLE</div>
+          <div class="att-val" id="p-roll" style="font-size:16px">—</div>
+          <div class="att-unit" style="margin-bottom:4px">degrees</div>
+          <div style="border-top:1px solid rgba(0,212,255,0.1);padding-top:4px">
+            <button onclick="(function(){var el=document.getElementById('roll-input-row');el.style.display=el.style.display==='none'?'flex':'none';})()"
+              style="font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;
+              background:transparent;color:var(--dim);border:1px solid rgba(0,212,255,0.15);
+              border-radius:2px;padding:2px 7px;cursor:pointer;width:100%">SET ROLL ▾</button>
+            <div id="roll-input-row" style="display:none;align-items:center;gap:4px;margin-top:4px">
+              <input id="inp-roll" type="number" min="-180" max="180" step="0.1" placeholder="-180 to 180"
+                style="flex:1;font-family:'Share Tech Mono',monospace;font-size:12px;
+                background:rgba(0,0,0,0.4);color:var(--cyan);border:1px solid rgba(0,212,255,0.2);
+                border-radius:2px;padding:3px 5px;">
+              <button onclick="applyRoll()" style="font-family:'Share Tech Mono',monospace;font-size:11px;
+                background:transparent;color:var(--cyan);border:1px solid rgba(0,212,255,0.3);
+                border-radius:2px;padding:3px 7px;cursor:pointer">GO</button>
+            </div>
+          </div>
+        </div>
+        <div class="att-cell">
+          <div class="att-lbl">ANG. RATE</div>
+          <div class="att-val" id="p-rate" style="font-size:16px">0.00</div>
+          <div class="att-unit">°/sec</div>
+        </div>
+      </div>
+      <div class="sec-hdr">QUATERNION (ECI → BODY)</div>
+      <div class="qrow">
+        <div class="qcell"><div class="qltr">w</div><div class="qnum" id="qw">—</div></div>
+        <div class="qcell"><div class="qltr">x</div><div class="qnum" id="qx">—</div></div>
+        <div class="qcell"><div class="qltr">y</div><div class="qnum" id="qy">—</div></div>
+        <div class="qcell"><div class="qltr">z</div><div class="qnum" id="qz">—</div></div>
+      </div>
+      <div class="qconv">Hamilton · passive · ECI→body · +Z boresight · w≥0</div>
+    </div>
+
+    <!-- STARS TAB -->
+    <div class="pane" id="pane-stars">
+      <div class="mrow">
+        <div class="metric"><div class="mv" id="m-det">0</div><div class="ml">DETECTED</div></div>
+        <div class="metric"><div class="mv" id="m-mat">0</div><div class="ml">MATCHED</div></div>
+        <div class="metric"><div class="mv" id="m-conf">—</div><div class="ml">CONF.</div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <span style="font-size:10px;color:var(--dim);letter-spacing:1px">SOLUTION CONFIDENCE</span>
+        <span style="font-size:11px;color:var(--green)" id="conf-pct">—</span>
+      </div>
+      <div class="ctrack"><div class="cfill" id="cfill" style="width:0%"></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;margin-bottom:2px">
+        <div class="sec-hdr" style="margin:0">IDENTIFIED STARS</div>
+        <div style="font-size:10px;color:var(--dim);letter-spacing:1px">MAG</div>
+      </div>
+      <div id="sl"></div>
+    </div>
+
+    <!-- ABOUT TAB -->
+    <div class="pane" id="pane-about">
+      <div class="exp-section">
+        <div class="exp-hdr">WHAT IS NOVA?</div>
+        <div class="exp-p">NOVA is a synthetic star tracker demonstration. It simulates how a real spacecraft camera identifies its pointing direction — RA, Dec, and Roll — purely by matching the star pattern it sees against a built-in catalog of ~120 named stars.</div>
+      </div>
+      <div class="exp-section">
+        <div class="exp-hdr">WHAT IS A STAR TRACKER?</div>
+        <div class="exp-p">A star tracker is a camera on a spacecraft that takes pictures of the sky and uses the star pattern to determine which way the spacecraft is pointing, without any GPS or ground contact. It's one of the most precise sensors ever built — accurate to a fraction of an arcsecond.</div>
+      </div>
+      <div class="exp-section">
+        <div class="exp-hdr">WHAT IS A QUATERNION?</div>
+        <div class="exp-p">A quaternion is four numbers that describe a 3D rotation — like a compass heading but for all three axes at once. A star tracker outputs one every frame to tell the spacecraft exactly how it's oriented in space.</div>
+        <div class="qcard">
+          <div class="qcard-ltr" style="color:#ffaa00">w</div>
+          <div class="qcard-desc">A "how much rotation" number, always between 0 and 1 (we force w≥0). Close to 1 means the camera is near its reference direction (RA=0°, Dec=0°). As it rotates further away, w decreases toward 0. Works together with x, y, z — rarely interpreted alone.</div>
+          <div class="qcard-ltr" style="color:#ff6060">x</div>
+          <div class="qcard-desc">Rotation axis toward the vernal equinox (RA = 0h).</div>
+          <div class="qcard-ltr" style="color:#00e87a">y</div>
+          <div class="qcard-desc">Rotation axis toward RA = 6h on the celestial equator.</div>
+          <div class="qcard-ltr" style="color:#00d4ff">z</div>
+          <div class="qcard-desc">Rotation axis toward the north celestial pole.</div>
+        </div>
+      </div>
+      <div class="exp-section">
+        <div class="exp-hdr">WHAT IS AN ARCSECOND?</div>
+        <div class="exp-p">A degree is divided into 60 arcminutes, and each arcminute into 60 arcseconds — so one arcsecond is 1/3600th of a degree. At arm's length, a single arcsecond is roughly the width of a human hair. Star trackers routinely achieve accuracy of 5–30 arcseconds, meaning they can pinpoint a spacecraft's orientation to a fraction of a human hair's width as seen from across a room. For reference, the full Moon spans about 1,800 arcseconds across.</div>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:10px;line-height:1.6">
+        Built by Sierra Space Star Tracker Team · CU Boulder Mechanical Engineering · Grad Design Project 2026
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CATALOG ──────────────────────────────────────────────────────
+var CAT=[
+  {n:"Sirius",b:"a CMa",ra:101.287,dc:-16.716,mg:-1.46},
+  {n:"Canopus",b:"a Car",ra:95.988,dc:-52.696,mg:-0.74},
+  {n:"Arcturus",b:"a Boo",ra:213.915,dc:19.182,mg:-0.05},
+  {n:"Vega",b:"a Lyr",ra:279.235,dc:38.784,mg:0.03},
+  {n:"Capella",b:"a Aur",ra:79.172,dc:45.998,mg:0.08},
+  {n:"Rigel",b:"b Ori",ra:78.634,dc:-8.202,mg:0.18},
+  {n:"Procyon",b:"a CMi",ra:114.825,dc:5.225,mg:0.40},
+  {n:"Betelgeuse",b:"a Ori",ra:88.793,dc:7.407,mg:0.45},
+  {n:"Achernar",b:"a Eri",ra:24.429,dc:-57.237,mg:0.45},
+  {n:"Hadar",b:"b Cen",ra:210.956,dc:-60.373,mg:0.61},
+  {n:"Altair",b:"a Aql",ra:297.696,dc:8.868,mg:0.76},
+  {n:"Acrux",b:"a Cru",ra:186.650,dc:-63.099,mg:0.77},
+  {n:"Aldebaran",b:"a Tau",ra:68.980,dc:16.509,mg:0.87},
+  {n:"Antares",b:"a Sco",ra:247.352,dc:-26.432,mg:0.96},
+  {n:"Spica",b:"a Vir",ra:201.298,dc:-11.161,mg:1.04},
+  {n:"Pollux",b:"b Gem",ra:116.329,dc:28.026,mg:1.16},
+  {n:"Fomalhaut",b:"a PsA",ra:344.413,dc:-29.622,mg:1.17},
+  {n:"Deneb",b:"a Cyg",ra:310.358,dc:45.280,mg:1.25},
+  {n:"Mimosa",b:"b Cru",ra:191.930,dc:-59.688,mg:1.25},
+  {n:"Regulus",b:"a Leo",ra:152.093,dc:11.967,mg:1.36},
+  {n:"Adhara",b:"e CMa",ra:104.656,dc:-28.972,mg:1.50},
+  {n:"Gacrux",b:"g Cru",ra:187.791,dc:-57.113,mg:1.63},
+  {n:"Shaula",b:"l Sco",ra:263.402,dc:-37.103,mg:1.63},
+  {n:"Bellatrix",b:"g Ori",ra:81.283,dc:6.350,mg:1.64},
+  {n:"Elnath",b:"b Tau",ra:81.573,dc:28.607,mg:1.68},
+  {n:"Alnilam",b:"e Ori",ra:84.053,dc:-1.202,mg:1.70},
+  {n:"Alnitak",b:"z Ori",ra:85.190,dc:-1.943,mg:1.74},
+  {n:"Alioth",b:"e UMa",ra:193.507,dc:55.960,mg:1.77},
+  {n:"Dubhe",b:"a UMa",ra:165.933,dc:61.751,mg:1.79},
+  {n:"Mirfak",b:"a Per",ra:51.081,dc:49.861,mg:1.79},
+  {n:"Wezen",b:"d CMa",ra:107.098,dc:-26.393,mg:1.84},
+  {n:"Alkaid",b:"h UMa",ra:206.886,dc:49.313,mg:1.86},
+  {n:"Sargas",b:"th Sco",ra:264.330,dc:-42.998,mg:1.87},
+  {n:"Menkalinan",b:"b Aur",ra:89.882,dc:44.947,mg:1.90},
+  {n:"Alhena",b:"g Gem",ra:99.428,dc:16.400,mg:1.93},
+  {n:"Peacock",b:"a Pav",ra:306.412,dc:-56.735,mg:1.94},
+  {n:"Polaris",b:"a UMi",ra:37.954,dc:89.264,mg:1.97},
+  {n:"Saiph",b:"k Ori",ra:86.939,dc:-9.670,mg:2.07},
+  {n:"Alphard",b:"a Hya",ra:141.897,dc:-8.659,mg:2.00},
+  {n:"Mintaka",b:"d Ori",ra:83.001,dc:-0.299,mg:2.23},
+  {n:"Castor",b:"a Gem",ra:113.649,dc:31.889,mg:1.58},
+  {n:"Alphecca",b:"a CrB",ra:233.672,dc:26.715,mg:2.23},
+  {n:"Mizar",b:"z UMa",ra:200.981,dc:54.926,mg:2.23},
+  {n:"Alpheratz",b:"a And",ra:2.097,dc:29.091,mg:2.07},
+  {n:"Imai",b:"d Cru",ra:183.786,dc:-58.749,mg:2.79},
+  {n:"Schedar",b:"a Cas",ra:10.127,dc:56.537,mg:2.24},
+  {n:"Caph",b:"b Cas",ra:2.295,dc:59.150,mg:2.28},
+  {n:"Navi",b:"g Cas",ra:14.177,dc:60.717,mg:2.15},
+  {n:"Ruchbah",b:"d Cas",ra:21.454,dc:60.235,mg:2.68},
+  {n:"Algol",b:"b Per",ra:47.042,dc:40.957,mg:2.12},
+  {n:"Mirach",b:"b And",ra:17.433,dc:35.620,mg:2.04},
+  {n:"Almach",b:"g And",ra:30.974,dc:42.330,mg:2.10},
+  {n:"Denebola",b:"b Leo",ra:177.265,dc:14.572,mg:2.14},
+  {n:"Algieba",b:"g Leo",ra:154.993,dc:19.841,mg:2.28},
+  {n:"Zosma",b:"d Leo",ra:168.527,dc:20.524,mg:2.56},
+  {n:"Kochab",b:"b UMi",ra:222.676,dc:74.156,mg:2.08},
+  {n:"Pherkad",b:"g UMi",ra:230.182,dc:71.834,mg:3.05},
+  {n:"Yildun",b:"d UMi",ra:263.054,dc:86.587,mg:4.36},
+  {n:"Urodelus",b:"e UMi",ra:251.556,dc:82.032,mg:4.22},
+  {n:"Alifa",b:"z UMi",ra:236.014,dc:77.795,mg:4.32},
+  {n:"Anwar",b:"h UMi",ra:244.009,dc:75.756,mg:4.95},
+  {n:"Rasalhague",b:"a Oph",ra:263.733,dc:12.560,mg:2.08},
+  {n:"Altair",b:"a Aql",ra:297.696,dc:8.868,mg:0.76},
+  {n:"Sadr",b:"g Cyg",ra:305.557,dc:40.257,mg:2.23},
+  {n:"Gienah",b:"e Cyg",ra:311.553,dc:33.970,mg:2.46},
+  {n:"Albireo",b:"b Cyg",ra:292.680,dc:27.960,mg:3.09},
+  {n:"Enif",b:"e Peg",ra:326.165,dc:9.875,mg:2.38},
+  {n:"Markab",b:"a Peg",ra:346.190,dc:15.212,mg:2.49},
+  {n:"Scheat",b:"b Peg",ra:345.944,dc:28.083,mg:2.44},
+  {n:"Algenib",b:"g Peg",ra:3.309,dc:15.183,mg:2.83},
+  {n:"Hamal",b:"a Ari",ra:31.793,dc:23.462,mg:2.00},
+  {n:"Acrab",b:"b Sco",ra:241.359,dc:-19.806,mg:2.50},
+  {n:"Dschubba",b:"d Sco",ra:240.083,dc:-22.622,mg:2.32},
+  {n:"Antares",b:"a Sco",ra:247.352,dc:-26.432,mg:0.96},
+  {n:"Merak",b:"b UMa",ra:165.460,dc:56.383,mg:2.37},
+  {n:"Phecda",b:"g UMa",ra:178.458,dc:53.695,mg:2.44},
+  {n:"Megrez",b:"d UMa",ra:183.857,dc:57.033,mg:3.31},
+  {n:"Vega",b:"a Lyr",ra:279.235,dc:38.784,mg:0.03},
+  {n:"Sheliak",b:"b Lyr",ra:282.520,dc:33.363,mg:3.52},
+  {n:"Sulafat",b:"g Lyr",ra:284.736,dc:32.690,mg:3.25},
+  // additional stars for full matching coverage
+  {n:"Kaus Aus.",b:"e Sgr",ra:276.043,dc:-34.384,mg:1.85},
+  {n:"Avior",b:"e Car",ra:125.629,dc:-59.510,mg:1.86},
+  {n:"Atria",b:"a TrA",ra:252.166,dc:-69.028,mg:1.91},
+  {n:"Mirzam",b:"b CMa",ra:95.675,dc:-17.956,mg:1.98},
+  {n:"Diphda",b:"b Cet",ra:10.897,dc:-17.987,mg:2.04},
+  {n:"Miaplacidus",b:"b Car",ra:138.300,dc:-69.717,mg:1.68},
+  {n:"Nunki",b:"s Sgr",ra:283.816,dc:-26.297,mg:2.05},
+  {n:"Izar",b:"e Boo",ra:221.247,dc:27.074,mg:2.37},
+  {n:"Suhail",b:"l Vel",ra:136.999,dc:-43.433,mg:2.23},
+  {n:"Segin",b:"e Cas",ra:28.599,dc:63.670,mg:3.37},
+  {n:"Alcyone",b:"h Tau",ra:56.871,dc:24.105,mg:2.87},
+  {n:"Alheka",b:"z Tau",ra:84.411,dc:21.142,mg:3.00},
+  {n:"Tejat",b:"mu Gem",ra:95.740,dc:22.514,mg:2.87},
+  {n:"Propus",b:"h Gem",ra:93.719,dc:22.506,mg:3.28},
+  {n:"Wasat",b:"d Gem",ra:110.030,dc:21.982,mg:3.53},
+  {n:"Gomeisa",b:"b CMi",ra:111.788,dc:8.289,mg:2.90},
+  {n:"Adhafera",b:"z Leo",ra:154.172,dc:23.417,mg:3.44},
+  {n:"Porrima",b:"g Vir",ra:190.415,dc:-1.449,mg:2.74},
+  {n:"Vindemiatrix",b:"e Vir",ra:195.544,dc:10.959,mg:2.83},
+  {n:"Muphrid",b:"h Boo",ra:208.671,dc:18.398,mg:2.68},
+  {n:"Seginus",b:"g Boo",ra:218.019,dc:38.308,mg:3.03},
+  {n:"Unukalhai",b:"a Ser",ra:236.067,dc:6.426,mg:2.63},
+  {n:"Sabik",b:"h Oph",ra:258.044,dc:-15.724,mg:2.43},
+  {n:"Tarazed",b:"g Aql",ra:292.176,dc:10.613,mg:2.72},
+  {n:"Okab",b:"z Aql",ra:295.024,dc:13.863,mg:2.99},
+  {n:"Alshain",b:"b Aql",ra:298.828,dc:6.407,mg:3.71},
+  {n:"Alderamin",b:"a Cep",ra:319.645,dc:62.585,mg:2.45},
+  {n:"Sadalsuud",b:"b Aqr",ra:322.889,dc:-5.571,mg:2.91},
+  {n:"Sadalmelik",b:"a Aqr",ra:331.446,dc:-0.020,mg:2.95},
+  {n:"Skat",b:"d Aqr",ra:339.858,dc:-15.821,mg:3.27},
+  {n:"Dabih",b:"b Cap",ra:305.252,dc:-14.781,mg:3.05},
+  {n:"Sheratan",b:"b Ari",ra:28.660,dc:20.808,mg:2.64},
+  {n:"Menkar",b:"a Cet",ra:45.570,dc:4.090,mg:2.54},
+  {n:"Mira",b:"o Cet",ra:34.837,dc:-2.978,mg:3.04},
+  {n:"Acamar",b:"th Eri",ra:44.565,dc:-40.305,mg:2.88},
+  {n:"Zaurak",b:"g Eri",ra:59.507,dc:-13.509,mg:2.97},
+  {n:"Kursa",b:"b Eri",ra:76.962,dc:-5.086,mg:2.79},
+  {n:"Lesath",b:"u Sco",ra:264.329,dc:-37.296,mg:2.70},
+  {n:"Eltanin",b:"g Dra",ra:269.152,dc:51.489,mg:2.24},
+  {n:"Rastaban",b:"b Dra",ra:261.321,dc:52.301,mg:2.79},
+  {n:"Ankaa",b:"a Phe",ra:6.571,dc:-42.306,mg:2.40},
+  {n:"Alrescha",b:"a Psc",ra:30.512,dc:2.764,mg:3.82}
+];
+// deduplicate
+(function(){var seen={};CAT=CAT.filter(function(s){if(seen[s.n])return false;seen[s.n]=true;return true;});})();
+
+var STAR_INFO={
+  "Sirius":{sp:"A1V",dist:8.6,fact:"Brightest star in the night sky. Used as an attitude reference by spacecraft."},
+  "Canopus":{sp:"F0Ib",dist:310,fact:"Second-brightest star. Key reference for deep-space navigation."},
+  "Arcturus":{sp:"K1III",dist:37,fact:"Brightest star in the northern sky. Orange giant 25x the Sun's diameter."},
+  "Vega":{sp:"A0V",dist:25,fact:"Will be the north pole star in ~13,700 years due to precession."},
+  "Capella":{sp:"G8III",dist:43,fact:"Sixth-brightest star. Actually two yellow giants orbiting each other."},
+  "Rigel":{sp:"B8Ia",dist:860,fact:"Blue supergiant. If as close as Sirius, would cast visible shadows at night."},
+  "Betelgeuse":{sp:"M2Iab",dist:700,fact:"Red supergiant in Orion's shoulder. Expected to go supernova."},
+  "Polaris":{sp:"F7Ib",dist:433,fact:"North Star. Within 0.7° of the north celestial pole."},
+  "Deneb":{sp:"A2Ia",dist:2600,fact:"Tail of Cygnus. One of the most luminous stars known."},
+  "Antares":{sp:"M1.5Iab",dist:550,fact:"Heart of Scorpius. A red supergiant 700x the Sun's diameter."},
+  "Aldebaran":{sp:"K5III",dist:65,fact:"Eye of Taurus the Bull. The Moon and planets occasionally pass in front."},
+  "Spica":{sp:"B1V",dist:250,fact:"Used by Hipparchus in 127 BC to discover the precession of the equinoxes."},
+  "Regulus":{sp:"B7V",dist:79,fact:"Spins so fast it bulges at the equator — rotates in under 16 hours."},
+  "Altair":{sp:"A7V",dist:17,fact:"Part of the Summer Triangle. Rotates so fast it is noticeably oblate."},
+  "Fomalhaut":{sp:"A3V",dist:25,fact:"Has a confirmed debris disk and planet candidate (Fomalhaut b)."}
+};
+
+var LINES_RAW=[
+  ["Mintaka","Alnilam"],["Alnilam","Alnitak"],
+  ["Betelgeuse","Bellatrix"],["Betelgeuse","Alnilam"],["Bellatrix","Mintaka"],
+  ["Saiph","Alnitak"],["Rigel","Mintaka"],["Rigel","Saiph"],
+  ["Dubhe","Merak"],["Merak","Phecda"],["Phecda","Megrez"],["Megrez","Dubhe"],
+  ["Megrez","Alioth"],["Alioth","Mizar"],["Mizar","Alkaid"],
+  ["Polaris","Yildun"],["Yildun","Urodelus"],["Urodelus","Alifa"],
+  ["Alifa","Kochab"],["Kochab","Pherkad"],["Pherkad","Anwar"],["Anwar","Alifa"],
+  ["Caph","Schedar"],["Schedar","Navi"],["Navi","Ruchbah"],
+  ["Castor","Pollux"],
+  ["Vega","Deneb"],["Vega","Altair"],["Deneb","Altair"],
+  ["Deneb","Sadr"],["Sadr","Albireo"],["Sadr","Gienah"],
+  ["Acrab","Dschubba"],["Dschubba","Antares"],
+  ["Regulus","Algieba"],["Algieba","Zosma"],["Zosma","Denebola"],
+  ["Gacrux","Acrux"],["Imai","Mimosa"],
+  ["Alpheratz","Mirach"],["Mirach","Almach"],
+  ["Markab","Scheat"],["Scheat","Alpheratz"],["Alpheratz","Algenib"],["Algenib","Markab"],
+  ["Sheliak","Sulafat"]
+];
+var catIdx=function(n){for(var i=0;i<CAT.length;i++){if(CAT[i].n===n)return i;}return -1;};
+var CONST_LINES=LINES_RAW.map(function(p){return[catIdx(p[0]),catIdx(p[1])];}).filter(function(p){return p[0]>=0&&p[1]>=0;});
+var GROUPS_RAW=[
+  {name:"Orion",stars:["Mintaka","Alnilam","Alnitak","Betelgeuse","Bellatrix","Rigel","Saiph"]},
+  {name:"Ursa Major",stars:["Dubhe","Merak","Phecda","Megrez","Alioth","Mizar","Alkaid"]},
+  {name:"Ursa Minor",stars:["Polaris","Kochab","Pherkad","Alifa","Anwar","Urodelus","Yildun"]},
+  {name:"Cassiopeia",stars:["Caph","Schedar","Navi","Ruchbah"]},
+  {name:"Leo",stars:["Regulus","Algieba","Zosma","Denebola"]},
+  {name:"Cygnus",stars:["Deneb","Sadr","Albireo","Gienah"]},
+  {name:"Crux",stars:["Acrux","Mimosa","Gacrux","Imai"]},
+  {name:"Andromeda",stars:["Alpheratz","Mirach","Almach"]},
+  {name:"Pegasus",stars:["Markab","Scheat","Algenib","Alpheratz"]},
+  {name:"Lyra",stars:["Vega","Sheliak","Sulafat"]}
+];
+var CONST_GROUPS=GROUPS_RAW.map(function(g){return{name:g.name,indices:g.stars.map(catIdx).filter(function(i){return i>=0;})};});
+
+// BG stars
+function mkRng(seed){var s=seed>>>0;return function(){s=Math.imul(s,1664525)+1013904223|0;return(s>>>0)/4294967296;};}
+var BG=[];var rng=mkRng(7777);
+for(var i=0;i<2000;i++){BG.push({ra:rng()*360,dc:Math.asin(rng()*2-1)*180/Math.PI,mg:2.0+rng()*4.2});}
+
+// ── MATH ─────────────────────────────────────────────────────────
+var D2R=Math.PI/180,R2D=180/Math.PI;
+function v3(ra,dc){var r=ra*D2R,d=dc*D2R;return[Math.cos(d)*Math.cos(r),Math.cos(d)*Math.sin(r),Math.sin(d)];}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function cross(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function norm(v){var n=Math.sqrt(dot(v,v));return n<1e-12?[0,0,1]:v.map(function(x){return x/n;});}
+function project(ra,dc,cam,W,H){
+  var sv=v3(ra,dc),cv=v3(cam.ra,cam.dc),c=dot(sv,cv);
+  if(c<0.015)return null;
+  var E=cross([0,0,1],cv);if(dot(E,E)<1e-10)E=[1,0,0];
+  E=norm(E);var U=norm(cross(cv,E));
+  var tng=sv.map(function(v,i){return v-c*cv[i];});
+  var px=dot(tng,E)/c,py=dot(tng,U)/c,rr=cam.roll*D2R;
+  var rx=px*Math.cos(rr)-py*Math.sin(rr),ry=px*Math.sin(rr)+py*Math.cos(rr);
+  var sc=(Math.min(W,H)/2)/Math.tan(cam.fov/2*D2R);
+  return{x:W/2+rx*sc,y:H/2-ry*sc};
+}
+function toQuat(ra,dc,roll){
+  function qmul(a,b){return[a[0]*b[0]-a[1]*b[1]-a[2]*b[2]-a[3]*b[3],a[0]*b[1]+a[1]*b[0]+a[2]*b[3]-a[3]*b[2],a[0]*b[2]-a[1]*b[3]+a[2]*b[0]+a[3]*b[1],a[0]*b[3]+a[1]*b[2]-a[2]*b[1]+a[3]*b[0]];}
+  function qz(a){return[Math.cos(a/2),0,0,Math.sin(a/2)];}
+  function qy(a){return[Math.cos(a/2),0,Math.sin(a/2),0];}
+  var qa=qmul(qmul(qz(ra*D2R),qy((90-dc)*D2R)),qz(roll*D2R));
+  var qp=[qa[0],-qa[1],-qa[2],-qa[3]];
+  var qc=qmul([0,0,0,1],qp);
+  if(qc[0]<0)qc=qc.map(function(v){return -v;});
+  var len=Math.sqrt(qc.reduce(function(s,v){return s+v*v;},0));
+  return qc.map(function(v){return v/len;});
+}
+
+// ── STATE ─────────────────────────────────────────────────────────
+var cam={ra:85,dc:0,roll:0,fov:25};
+var thresh=6,pipelineMode=3,matchedStars=[],bgRings=false;
+var animP={},animPBG={},frame=0,t0=Date.now();
+var prevRa=85,prevDc=0,prevT=performance.now(),angRate=0;
+var tabOpen=false,activeTab="attitude";
+
+// ── CANVAS ────────────────────────────────────────────────────────
+var cvs=document.getElementById("cvs"),ctx=cvs.getContext("2d"),W=0,H=0;
+function $(id){return document.getElementById(id);}
+
+function resize(){
+  W=cvs.width=cvs.offsetWidth;H=cvs.height=cvs.offsetHeight;
+  var hudH=$("hud").offsetHeight||50;
+  $("chips").style.top=hudH+"px";
+  var chipsH=$("chips").offsetHeight||32;
+  $("btn-info").style.top=(hudH+chipsH+8)+"px";
+}
+resize();
+// Re-run after fonts load so heights are accurate
+window.addEventListener("load",resize);
+window.addEventListener("resize",resize);
+
+// ── DRAW ──────────────────────────────────────────────────────────
+function drawDot(x,y,mg,bright,rgb){
+  var r=Math.max(0.5,(bright?3.0:1.8)-mg*0.25);
+  var a=bright?1:Math.max(0.08,1.0-mg*0.12);
+  if(bright&&mg<2){var g=ctx.createRadialGradient(x,y,0,x,y,r*5);g.addColorStop(0,"rgba("+rgb+",0.22)");g.addColorStop(1,"rgba(0,0,0,0)");ctx.beginPath();ctx.arc(x,y,r*5,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();}
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle="rgba("+rgb+","+a+")";ctx.fill();
+}
+
+function drawTriangleMatching(visCat){
+  var det=visCat.filter(function(e){return e.s.mg<=thresh;});
+  if(det.length<3)return;
+  var stars=det.slice(0,Math.min(det.length,10));
+  var tris=[];
+  for(var a=0;a<stars.length-2;a++)for(var b=a+1;b<stars.length-1;b++)for(var c=b+1;c<stars.length;c++)tris.push([a,b,c]);
+  if(!tris.length)return;
+  var period=45,triIdx=Math.floor(frame/period)%tris.length,phase=(frame%period)/period,matched=phase>0.55;
+  ctx.save();
+  for(var i=0;i<tris.length;i++){
+    if(i===triIdx)continue;var t=tris[i];
+    ctx.beginPath();ctx.moveTo(stars[t[0]].p.x,stars[t[0]].p.y);ctx.lineTo(stars[t[1]].p.x,stars[t[1]].p.y);ctx.lineTo(stars[t[2]].p.x,stars[t[2]].p.y);ctx.closePath();
+    ctx.strokeStyle="rgba(255,170,0,0.06)";ctx.lineWidth=0.5;ctx.stroke();
+  }
+  var at=tris[triIdx];
+  var p0=stars[at[0]].p,p1=stars[at[1]].p,p2=stars[at[2]].p;
+  var s0=stars[at[0]].s,s1=stars[at[1]].s,s2=stars[at[2]].s;
+  var lc=matched?"rgba(0,232,122,0.9)":"rgba(255,170,0,0.85)";
+  ctx.setLineDash([6,4]);
+  ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.closePath();
+  ctx.strokeStyle=lc;ctx.lineWidth=1.3;ctx.stroke();ctx.setLineDash([]);
+  [p0,p1,p2].forEach(function(p){ctx.beginPath();ctx.arc(p.x,p.y,5,0,Math.PI*2);ctx.strokeStyle=lc;ctx.lineWidth=1;ctx.stroke();});
+  function angSep(sa,sb){return Math.acos(Math.max(-1,Math.min(1,dot(v3(sa.ra,sa.dc),v3(sb.ra,sb.dc)))))*R2D;}
+  var sides=[{a:p0,b:p1,s:angSep(s0,s1)},{a:p1,b:p2,s:angSep(s1,s2)},{a:p0,b:p2,s:angSep(s0,s2)}];
+  ctx.font='11px "Share Tech Mono",monospace';
+  for(var i=0;i<sides.length;i++){var mid={x:(sides[i].a.x+sides[i].b.x)/2,y:(sides[i].a.y+sides[i].b.y)/2};ctx.fillStyle=lc;ctx.fillText(sides[i].s.toFixed(2)+"°",mid.x+4,mid.y-3);}
+  ctx.font='10px "Share Tech Mono",monospace';ctx.fillStyle="rgba(200,225,255,0.7)";
+  ctx.fillText(s0.n,p0.x+9,p0.y-5);ctx.fillText(s1.n,p1.x+9,p1.y-5);ctx.fillText(s2.n,p2.x+9,p2.y-5);
+  if(phase>0.2){
+    var hashStr="0x"+(Math.abs(Math.imul(at[0]*31+at[1]*17+at[2]*7,0x9e3779b9))>>>0).toString(16).toUpperCase().slice(0,6);
+    var sy=H-80;
+    ctx.font='11px "Share Tech Mono",monospace';ctx.fillStyle=matched?"rgba(0,232,122,0.95)":"rgba(255,170,0,0.85)";
+    ctx.fillText(matched?"✓ CATALOG MATCH   HASH: "+hashStr:"PROBING...   HASH: "+hashStr,12,sy);
+    ctx.font='10px "Share Tech Mono",monospace';ctx.fillStyle="rgba(0,212,255,0.55)";
+    ctx.fillText("Triangle "+(triIdx+1)+" / "+tris.length+"   ∠ "+sides[0].s.toFixed(2)+"°  "+sides[1].s.toFixed(2)+"°  "+sides[2].s.toFixed(2)+"°",12,sy+16);
+  }
+  ctx.restore();
+}
+
+function draw(){
+  frame++;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle="#010408";ctx.fillRect(0,0,W,H);
+  // grid
+  ctx.save();ctx.strokeStyle="rgba(0,212,255,0.035)";ctx.lineWidth=0.5;
+  for(var ra=0;ra<360;ra+=15){ctx.beginPath();var f=true;for(var d=-88;d<=88;d+=4){var p=project(ra,d,cam,W,H);if(!p){f=true;continue;}if(f){ctx.moveTo(p.x,p.y);f=false;}else ctx.lineTo(p.x,p.y);}ctx.stroke();}
+  ctx.restore();
+  // scanline
+  if(matchedStars.length<4){var y2=(frame*1.4)%H,g2=ctx.createLinearGradient(0,y2-30,0,y2+30);g2.addColorStop(0,"rgba(0,212,255,0)");g2.addColorStop(.5,"rgba(0,212,255,0.03)");g2.addColorStop(1,"rgba(0,212,255,0)");ctx.fillStyle=g2;ctx.fillRect(0,y2-30,W,60);}
+  // BG stars
+  var bgDetCnt=0;
+  for(var i=0;i<BG.length;i++){var p=project(BG[i].ra,BG[i].dc,cam,W,H);if(!p||p.x<-5||p.x>W+5||p.y<-5||p.y>H+5)continue;var r=Math.max(0.4,1.5-BG[i].mg*0.14),a=Math.max(0.08,0.75-BG[i].mg*0.09);ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle="rgba(190,215,245,"+a+")";ctx.fill();
+    if(BG[i].mg<=thresh)bgDetCnt++;
+    if(bgRings&&BG[i].mg<=thresh){
+      if(!(i in animPBG))animPBG[i]=0;
+      animPBG[i]=Math.min(animPBG[i]+0.025,1);
+      var ph2=animPBG[i];
+      ctx.beginPath();ctx.arc(p.x,p.y,7+(1-ph2)*12,0,Math.PI*2);ctx.strokeStyle="rgba(255,170,0,"+ph2*0.6+")";ctx.lineWidth=0.8;ctx.stroke();
+    } else if(i in animPBG)delete animPBG[i];
+  }
+  // constellation lines
+  var posMap={},visCat=[];
+  for(var i=0;i<CAT.length;i++){var p=project(CAT[i].ra,CAT[i].dc,cam,W,H);if(p&&p.x>-30&&p.x<W+30&&p.y>-30&&p.y<H+30){visCat.push({s:CAT[i],p:p,ci:i});posMap[i]=p;}}
+  ctx.save();ctx.strokeStyle="rgba(0,212,255,0.12)";ctx.lineWidth=0.8;
+  for(var k=0;k<CONST_LINES.length;k++){var a2=CONST_LINES[k][0],b2=CONST_LINES[k][1];if(posMap[a2]&&posMap[b2]){ctx.beginPath();ctx.moveTo(posMap[a2].x,posMap[a2].y);ctx.lineTo(posMap[b2].x,posMap[b2].y);ctx.stroke();}}
+  // constellation labels
+  ctx.font='10px "Orbitron",sans-serif';ctx.textAlign="center";
+  for(var k=0;k<CONST_GROUPS.length;k++){var g3=CONST_GROUPS[k];var pts=g3.indices.map(function(i){return posMap[i];}).filter(Boolean);if(pts.length<Math.ceil(g3.indices.length*0.6))continue;var lx=pts.reduce(function(s,p){return s+p.x;},0)/pts.length,ly=pts.reduce(function(s,p){return s+p.y;},0)/pts.length;if(lx<30||lx>W-30||ly<30||ly>H-30)continue;ctx.fillStyle="rgba(0,212,255,0.18)";ctx.fillText(g3.name.toUpperCase(),lx,ly);}
+  ctx.textAlign="left";ctx.restore();
+  // catalog stars + detection
+  var nowMatched=[],detCnt=0,catDetCnt=0;
+  for(var k=0;k<visCat.length;k++){
+    var s=visCat[k].s,p=visCat[k].p,ci=visCat[k].ci;
+    var rgb=s.mg<0?"255,255,200":s.n==="Betelgeuse"||s.n==="Antares"?"255,140,80":"240,240,255";
+    drawDot(p.x,p.y,s.mg,true,rgb);
+    if(s.mg>thresh){delete animP[ci];continue;}
+    catDetCnt++;detCnt++;
+    if(pipelineMode===0)continue;
+    if(!(ci in animP))animP[ci]=0;
+    animP[ci]=Math.min(animP[ci]+0.033,1);
+    var ph=animP[ci];
+    ctx.beginPath();ctx.arc(p.x,p.y,9+(1-ph)*16,0,Math.PI*2);ctx.strokeStyle="rgba(255,170,0,"+ph*0.75+")";ctx.lineWidth=0.9;ctx.stroke();
+    if(ph>0.5&&(pipelineMode===3||pipelineMode===2)){
+      if(pipelineMode===3){
+        ctx.beginPath();ctx.arc(p.x,p.y,13,0,Math.PI*2);ctx.strokeStyle="rgba(0,212,255,"+(ph-0.5)*1.6+")";ctx.lineWidth=1.0;ctx.stroke();
+        if(ph>0.75){ctx.font='10px "Share Tech Mono",monospace';ctx.fillStyle="rgba(0,212,255,"+(ph-0.75)*4+")";ctx.fillText(s.n,p.x+17,p.y-4);ctx.textAlign="left";}
+      }
+      nowMatched.push(s);
+    }
+  }
+  if(pipelineMode===2)drawTriangleMatching(visCat);
+  // reticle
+  var rx=W/2,ry=H/2;
+  ctx.save();ctx.strokeStyle="rgba(0,212,255,0.4)";ctx.lineWidth=0.9;
+  ctx.beginPath();ctx.moveTo(rx-18,ry);ctx.lineTo(rx-4,ry);ctx.moveTo(rx+4,ry);ctx.lineTo(rx+18,ry);ctx.moveTo(rx,ry-18);ctx.lineTo(rx,ry-4);ctx.moveTo(rx,ry+4);ctx.lineTo(rx,ry+18);ctx.stroke();
+  ctx.beginPath();ctx.arc(rx,ry,2.5,0,Math.PI*2);ctx.stroke();
+  ctx.restore();
+  matchedStars=nowMatched;
+  updatePanel(bgDetCnt+catDetCnt,nowMatched.length);
+}
+
+// ── PANEL UPDATE ──────────────────────────────────────────────────
+function updatePanel(detCnt,matCnt){
+  var now=performance.now(),dt=Math.max(0.016,(now-prevT)/1000);prevT=now;
+  var dRa=(cam.ra-prevRa)*Math.cos(cam.dc*D2R),dDc=cam.dc-prevDc;
+  angRate=angRate*0.82+Math.sqrt(dRa*dRa+dDc*dDc)/dt*0.18;
+  prevRa=cam.ra;prevDc=cam.dc;
+  var tracking=matCnt>=2,locked=matCnt>=4;
+  var badge=$("badge");
+  badge.textContent=locked?"LOCKED":tracking?"TRACKING":"ACQUIRING";
+  badge.className="badge "+(locked?"badge-lck":tracking?"badge-trk":"badge-acq");
+  $("hud-ra").textContent=tracking?"RA: "+cam.ra.toFixed(2)+"°":"—";
+  $("hud-dc").textContent=tracking?"DEC: "+cam.dc.toFixed(2)+"°":"—";
+  $("radeclbl").textContent="RA "+cam.ra.toFixed(2)+"° DEC "+cam.dc.toFixed(2)+"°";
+  if(tracking){
+    $("p-ra").textContent=cam.ra.toFixed(3);$("p-dc").textContent=cam.dc.toFixed(3);$("p-roll").textContent=cam.roll.toFixed(2);
+    var be=0.0028,mf=Math.max(0.3,1-(matCnt-2)*0.08),rf=1+Math.min(2,angRate*0.4);
+    var er=(be*mf*rf+Math.abs(Math.sin(frame*0.07)*0.0003)).toFixed(4);
+    $("p-ra-err").textContent="±"+er+"°";$("p-dc-err").textContent="±"+er+"°";
+    var q=toQuat(cam.ra,cam.dc,cam.roll);
+    $("qw").textContent=q[0].toFixed(4);$("qx").textContent=q[1].toFixed(4);$("qy").textContent=q[2].toFixed(4);$("qz").textContent=q[3].toFixed(4);
+  } else {
+    ["p-ra","p-dc","p-roll"].forEach(function(id){$(id).textContent="—";});
+    $("p-ra-err").textContent="";$("p-dc-err").textContent="";
+    ["qw","qx","qy","qz"].forEach(function(id){$(id).textContent="—";});
+  }
+  $("p-rate").textContent=Math.min(99.9,angRate).toFixed(2);
+  var conf=locked?Math.min(99.9,70+matCnt*4):tracking?32+matCnt*13:0;
+  $("m-det").textContent=detCnt;$("m-mat").textContent=matCnt;
+  $("m-conf").textContent=tracking?conf.toFixed(1)+"%":"—";
+  $("conf-pct").textContent=tracking?conf.toFixed(1)+"%":"—";
+  var cfill=$("cfill");cfill.style.width=(tracking?conf:0)+"%";cfill.style.backgroundColor=conf>70?"#00e87a":conf>35?"#ffaa00":"#ff4060";
+  // star list
+  var sl=$("sl"),sorted=matchedStars.slice().sort(function(a,b){return a.mg-b.mg;});
+  var names={};sorted.forEach(function(s){names[s.n]=true;});
+  var rows=sl.querySelectorAll(".sr");for(var i=0;i<rows.length;i++){if(!names[rows[i].dataset.n])rows[i].remove();}
+  sorted.forEach(function(s){
+    if(sl.querySelector('[data-n="'+s.n+'"]'))return;
+    var d=document.createElement("div");d.className="sr";d.dataset.n=s.n;
+    var specColors={O:"#aaddff",B:"#cce8ff",A:"#ffffff",F:"#ffffc0",G:"#ffee80",K:"#ffbb60",M:"#ff8040"};
+    var info=STAR_INFO[s.n];var sp=info?info.sp.charAt(0):"G";var col=specColors[sp]||"#ffffff";
+    d.innerHTML='<div class="sr-dot" style="background:'+col+'"></div><div class="sr-name">'+s.n+'</div><div class="sr-mag">'+s.mg.toFixed(2)+'</div>';
+    sl.appendChild(d);
+  });
+}
+
+// ── LOOP ──────────────────────────────────────────────────────────
+// ── GEO WIDGET ────────────────────────────────────────────────────
+function drawGeoWidget(){
+  var gc=$("geo-cvs");if(!gc)return;
+  var gx=gc.getContext("2d");
+  var W2=130,H2=130,cx2=65,cy2=68;
+  gx.clearRect(0,0,W2,H2);
+  // bg stars
+  var stars2=[[10,14],[24,8],[40,20],[55,5],[80,12],[100,8],[120,18],[15,40],[30,50],[50,35],[70,45],[90,30],[110,40],[20,60],[115,62],[10,85],[35,80],[108,75],[18,105],[42,100],[90,100],[112,90],[24,118],[55,115],[105,112]];
+  for(var i=0;i<stars2.length;i++){gx.beginPath();gx.arc(stars2[i][0]*W2/180,stars2[i][1]*H2/180,0.7,0,Math.PI*2);gx.fillStyle="rgba(180,210,255,0.28)";gx.fill();}
+  // N tick
+  gx.beginPath();gx.moveTo(cx2,cy2-57);gx.lineTo(cx2,cy2-52);gx.strokeStyle="rgba(0,212,255,0.25)";gx.lineWidth=1;gx.stroke();
+  gx.font='7px "Share Tech Mono",monospace';gx.fillStyle="rgba(0,212,255,0.28)";gx.textAlign="center";gx.fillText("N",cx2,cy2-44);gx.textAlign="left";
+  // orbit
+  var orbitR=50,orbitTilt=0.30;
+  gx.beginPath();gx.ellipse(cx2,cy2,orbitR,orbitR*orbitTilt,0,0,Math.PI*2);
+  gx.strokeStyle="rgba(0,212,255,0.18)";gx.lineWidth=0.8;gx.setLineDash([3,4]);gx.stroke();gx.setLineDash([]);
+  // atmosphere glow
+  var atm=gx.createRadialGradient(cx2,cy2,14,cx2,cy2,23);
+  atm.addColorStop(0,"rgba(0,80,180,0)");atm.addColorStop(0.7,"rgba(0,150,255,0.10)");atm.addColorStop(1,"rgba(0,150,255,0)");
+  gx.beginPath();gx.arc(cx2,cy2,23,0,Math.PI*2);gx.fillStyle=atm;gx.fill();
+  // earth
+  var eg=gx.createRadialGradient(cx2-4,cy2-4,0,cx2,cy2,16);
+  eg.addColorStop(0,"#1a5fa8");eg.addColorStop(0.5,"#0d3d70");eg.addColorStop(1,"#06204a");
+  gx.beginPath();gx.arc(cx2,cy2,16,0,Math.PI*2);gx.fillStyle=eg;gx.fill();
+  gx.strokeStyle="rgba(0,100,200,0.4)";gx.lineWidth=0.5;gx.stroke();
+  // continents
+  gx.fillStyle="rgba(20,130,60,0.55)";
+  gx.beginPath();gx.ellipse(cx2-4,cy2-3,6,4,0.3,0,Math.PI*2);gx.fill();
+  gx.beginPath();gx.ellipse(cx2+5,cy2-2,5,5,0.8,0,Math.PI*2);gx.fill();
+  gx.beginPath();gx.ellipse(cx2+4,cy2+5,4,3,0.5,0,Math.PI*2);gx.fill();
+  // equator
+  gx.beginPath();gx.moveTo(cx2-16,cy2);gx.lineTo(cx2+16,cy2);gx.strokeStyle="rgba(0,212,255,0.2)";gx.lineWidth=0.5;gx.stroke();
+  // satellite position
+  var ang=-cam.ra*Math.PI/180;
+  var sx=cx2+Math.cos(ang)*orbitR,sy=cy2+Math.sin(ang)*orbitR*orbitTilt;
+  // boresight direction
+  var radAngle=Math.atan2(sy-cy2,sx-cx2),dcRad=cam.dc*Math.PI/180;
+  var boreX=Math.cos(radAngle)*Math.cos(dcRad),boreY=Math.sin(radAngle)*Math.cos(dcRad)-Math.sin(dcRad);
+  var bLen=Math.sqrt(boreX*boreX+boreY*boreY);if(bLen>0.001){boreX/=bLen;boreY/=bLen;}
+  var boreLen=20,bx=sx+boreX*boreLen,by=sy+boreY*boreLen;
+  // boresight line
+  gx.beginPath();gx.moveTo(sx,sy);gx.lineTo(bx,by);
+  gx.strokeStyle="rgba(255,170,0,0.65)";gx.lineWidth=1.2;gx.setLineDash([2,2]);gx.stroke();gx.setLineDash([]);
+  gx.beginPath();gx.arc(bx,by,2.5,0,Math.PI*2);gx.fillStyle="rgba(255,170,0,0.8)";gx.fill();
+  // satellite body
+  var perpX=-boreY,perpY=boreX;
+  gx.fillStyle="rgba(0,180,255,0.75)";
+  gx.beginPath();gx.moveTo(sx+perpX*3,sy+perpY*3);gx.lineTo(sx+perpX*7,sy+perpY*7);gx.lineTo(sx+perpX*7+boreX*2.5,sy+perpY*7+boreY*2.5);gx.lineTo(sx+perpX*3+boreX*2.5,sy+perpY*3+boreY*2.5);gx.closePath();gx.fill();
+  gx.beginPath();gx.moveTo(sx-perpX*3,sy-perpY*3);gx.lineTo(sx-perpX*7,sy-perpY*7);gx.lineTo(sx-perpX*7+boreX*2.5,sy-perpY*7+boreY*2.5);gx.lineTo(sx-perpX*3+boreX*2.5,sy-perpY*3+boreY*2.5);gx.closePath();gx.fill();
+  gx.fillStyle="#cc8800";
+  gx.beginPath();gx.moveTo(sx-perpX*2.5-boreX*2.5,sy-perpY*2.5-boreY*2.5);gx.lineTo(sx+perpX*2.5-boreX*2.5,sy+perpY*2.5-boreY*2.5);gx.lineTo(sx+perpX*2.5+boreX*2.5,sy+perpY*2.5+boreY*2.5);gx.lineTo(sx-perpX*2.5+boreX*2.5,sy-perpY*2.5+boreY*2.5);gx.closePath();gx.fill();
+  // RA tick labels
+  var ticks=[[0,"0h"],[90,"6h"],[180,"12h"],[270,"18h"]];
+  for(var ti=0;ti<ticks.length;ti++){var ta=-ticks[ti][0]*Math.PI/180;var tx=cx2+Math.cos(ta)*orbitR,ty=cy2+Math.sin(ta)*orbitR*orbitTilt;gx.beginPath();gx.arc(tx,ty,1.5,0,Math.PI*2);gx.fillStyle="rgba(0,212,255,0.25)";gx.fill();gx.font='6px "Share Tech Mono",monospace';gx.fillStyle="rgba(0,212,255,0.25)";gx.textAlign="center";gx.fillText(ticks[ti][1],tx,ty-4);}
+  gx.textAlign="left";
+}
+
+var lastT=0;
+function loop(t){
+  requestAnimationFrame(loop);
+  if(t-lastT<16)return;lastT=t;
+  draw();
+  drawGeoWidget();
+}
+requestAnimationFrame(loop);
+
+// ── TOUCH DRAG ────────────────────────────────────────────────────
+var touch0=null,touch1=null,pinchDist0=0,fovOnPinch=25;
+var wrap=document.getElementById("wrap");
+
+function getTouchPos(e){return{x:e.touches[0].clientX,y:e.touches[0].clientY};}
+
+wrap.addEventListener("touchstart",function(e){
+  e.preventDefault();
+  if(infoOpen)return;
+  if(e.touches.length===1){touch0={x:e.touches[0].clientX,y:e.touches[0].clientY};touch1=null;}
+  else if(e.touches.length===2){
+    touch0={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    touch1={x:e.touches[1].clientX,y:e.touches[1].clientY};
+    pinchDist0=Math.hypot(touch1.x-touch0.x,touch1.y-touch0.y);
+    fovOnPinch=cam.fov;
+  }
+},{passive:false});
+
+wrap.addEventListener("touchmove",function(e){
+  e.preventDefault();
+  if(e.touches.length===1&&touch0&&!touch1){
+    var dx=e.touches[0].clientX-touch0.x,dy=e.touches[0].clientY-touch0.y;
+    var sc=(Math.min(W,H)/2)/Math.tan(cam.fov/2*D2R);
+    var dRa=-dx/sc/Math.cos(cam.dc*D2R)*R2D,dDc=dy/sc*R2D;
+    cam.ra=((cam.ra+dRa)+360)%360;
+    cam.dc=Math.max(-89,Math.min(89,cam.dc+dDc));
+    touch0={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    for(var k in animP)animP[k]=0;
+  } else if(e.touches.length===2){
+    var t0={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    var t1={x:e.touches[1].clientX,y:e.touches[1].clientY};
+    var d=Math.hypot(t1.x-t0.x,t1.y-t0.y);
+    cam.fov=Math.max(5,Math.min(40,fovOnPinch*(pinchDist0/d)));
+    updateFovUI();
+  }
+},{passive:false});
+
+wrap.addEventListener("touchend",function(e){
+  if(e.touches.length===0){
+    // check tap
+    if(touch0&&Math.abs(e.changedTouches[0].clientX-touch0.x)<8&&Math.abs(e.changedTouches[0].clientY-touch0.y)<8){
+      handleTap(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+    }
+    touch0=null;touch1=null;
+  } else if(e.touches.length===1){
+    touch0={x:e.touches[0].clientX,y:e.touches[0].clientY};touch1=null;
+  }
+},{passive:false});
+
+var infoOpen=false;
+function toggleInfoModal(){
+  infoOpen=!infoOpen;
+  var m=$("info-modal");
+  m.style.display=infoOpen?"flex":"none";
+}
+
+// ── MOUSE SUPPORT (desktop testing) ──────────────────────────────
+var mouseDragging=false,mouseWas=null,mouseMoved=false;
+wrap.addEventListener("mousedown",function(e){if(infoOpen)return;mouseDragging=true;mouseWas={x:e.clientX,y:e.clientY};mouseMoved=false;});
+wrap.addEventListener("mousemove",function(e){
+  if(!mouseDragging||!mouseWas)return;
+  var dx=e.clientX-mouseWas.x,dy=e.clientY-mouseWas.y;
+  if(Math.abs(dx)+Math.abs(dy)>3)mouseMoved=true;
+  var sc=(Math.min(W,H)/2)/Math.tan(cam.fov/2*D2R);
+  cam.ra=((cam.ra-dx/sc/Math.cos(cam.dc*D2R)*R2D)+360)%360;
+  cam.dc=Math.max(-89,Math.min(89,cam.dc+dy/sc*R2D));
+  mouseWas={x:e.clientX,y:e.clientY};
+  for(var k in animP)animP[k]=0;
+});
+wrap.addEventListener("mouseup",function(e){
+  if(!mouseMoved&&!infoOpen)handleTap(e.clientX,e.clientY);
+  mouseDragging=false;mouseWas=null;
+});
+wrap.addEventListener("mouseleave",function(){mouseDragging=false;mouseWas=null;});
+wrap.addEventListener("wheel",function(e){
+  e.preventDefault();
+  cam.fov=Math.max(5,Math.min(40,cam.fov+e.deltaY*0.02));
+  updateFovUI();
+},{passive:false});
+
+function handleTap(cx,cy){
+  if(infoOpen)return;
+  var popup=$("star-popup");
+  // if popup is showing, a tap anywhere outside it closes it
+  if(popup.style.display==="block"){popup.style.display="none";return;}
+  // Convert screen coords → canvas pixel coords
+  var rect=cvs.getBoundingClientRect();
+  var px=(cx-rect.left)*(W/rect.width);
+  var py=(cy-rect.top)*(H/rect.height);
+  var best=null,bestD=44;
+  for(var i=0;i<CAT.length;i++){
+    if(CAT[i].mg>thresh)continue;
+    var p=project(CAT[i].ra,CAT[i].dc,cam,W,H);if(!p)continue;
+    var d=Math.hypot(p.x-px,p.y-py);
+    if(d<bestD){bestD=d;best=CAT[i];}
+  }
+  if(best){
+    var info=STAR_INFO[best.n];
+    $("sp-name").textContent=best.n+" ("+best.b+")";
+    // Always show magnitude
+    $("sp-mag").textContent="mag "+best.mg.toFixed(2)+(info&&info.sp?" · "+info.sp:"")+(info&&info.dist?" · "+info.dist+" ly":"");
+    // Extra info if available
+    $("sp-info").textContent=info&&info.fact?info.fact:"";
+    $("sp-info").style.display=info&&info.fact?"block":"none";
+    popup.style.left=Math.min(cx+10,window.innerWidth-230)+"px";
+    popup.style.top=Math.max(60,cy-60)+"px";
+    popup.style.display="block";
+  } else {
+    if(cy>window.innerHeight-200)toggleSheet();
+  }
+}
+
+// ── FOV CONTROLS ──────────────────────────────────────────────────
+function applyRoll(){
+  var v=parseFloat(document.getElementById("inp-roll").value);
+  if(isNaN(v))return;
+  cam.roll=Math.max(-180,Math.min(180,v));
+  for(var k in animP)animP[k]=0;
+}
+
+function updateFovUI(){
+  $("fov-lbl").textContent=cam.fov.toFixed(0)+"°";
+  $("fovlbl").textContent="FOV "+cam.fov.toFixed(0)+"°";
+  for(var k in animP)animP[k]=0;
+}
+$("btn-fov-in").addEventListener("click",function(){cam.fov=Math.max(5,cam.fov-2);updateFovUI();});
+$("btn-bgrings").addEventListener("click",function(){
+  bgRings=!bgRings;
+  $("btn-bgrings").classList.toggle("on",bgRings);
+  if(!bgRings)for(var k in animPBG)delete animPBG[k];
+});
+
+// ── CHIPS BAR MOUSE SCROLL ────────────────────────────────────────
+(function(){
+  var chips=$("chips"),isDragging=false,startX=0,scrollLeft=0;
+  chips.addEventListener("mousedown",function(e){isDragging=true;startX=e.pageX-chips.offsetLeft;scrollLeft=chips.scrollLeft;chips.style.cursor="grabbing";e.preventDefault();});
+  document.addEventListener("mouseup",function(){isDragging=false;chips.style.cursor="grab";});
+  document.addEventListener("mousemove",function(e){if(!isDragging)return;var x=e.pageX-chips.offsetLeft;chips.scrollLeft=scrollLeft-(x-startX);});
+  chips.addEventListener("wheel",function(e){e.preventDefault();chips.scrollLeft+=e.deltaY*0.8;},{passive:false});
+})();
+
+$("btn-reset").addEventListener("click",function(){
+  cam.ra=85;cam.dc=0;cam.roll=0;cam.fov=25;
+  pipelineMode=3;thresh=6;bgRings=false;
+  for(var k in animP)delete animP[k];
+  for(var k in animPBG)delete animPBG[k];
+  matchedStars=[];
+  $("pipe-lbl").textContent="MATCH";
+  $("btn-pipeline").classList.add("on");
+  $("btn-bgrings").classList.remove("on");
+  updateFovUI();
+});
+$("btn-fov-out").addEventListener("click",function(){cam.fov=Math.min(40,cam.fov+2);updateFovUI();});
+
+// ── PIPELINE ──────────────────────────────────────────────────────
+var pipeLabels=["RAW","DETECT","TRIANGLES","MATCH"];
+$("btn-pipeline").addEventListener("click",function(){
+  pipelineMode=(pipelineMode+1)%4;
+  $("pipe-lbl").textContent=pipeLabels[pipelineMode];
+  $("btn-pipeline").classList.toggle("on",pipelineMode>0);
+});
+
+// ── TABS ──────────────────────────────────────────────────────────
+function switchTab(name){
+  if(tabOpen&&activeTab===name){tabOpen=false;$("sheet").classList.remove("expanded");return;}
+  activeTab=name;
+  document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("active",t.dataset.tab===name);});
+  document.querySelectorAll(".pane").forEach(function(p){p.classList.toggle("active",p.id==="pane-"+name);});
+  tabOpen=true;$("sheet").classList.add("expanded");
+}
+function toggleSheet(){tabOpen=!tabOpen;$("sheet").classList.toggle("expanded",tabOpen);}
+document.getElementById("tabs").addEventListener("click",function(e){
+  if(!e.target.closest(".tab")&&!tabOpen){tabOpen=true;$("sheet").classList.add("expanded");}
+});
+
+// ── GOTO ──────────────────────────────────────────────────────────
+function gotoStar(ra,dc,fov){
+  var sRa=cam.ra,sDc=cam.dc,sFov=cam.fov;
+  var dRa=ra-sRa;if(dRa>180)dRa-=360;if(dRa<-180)dRa+=360;
+  var dur=800,tp=performance.now();
+  function ease(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+  function step(now){
+    var t=Math.min(1,(now-tp)/dur),e=ease(t);
+    cam.ra=((sRa+dRa*e)+360)%360;cam.dc=sDc+(dc-sDc)*e;cam.fov=sFov+(fov-sFov)*e;
+    updateFovUI();for(var k in animP)animP[k]=0;
+    if(t<1)requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+</script>
+</body>
+</html>
